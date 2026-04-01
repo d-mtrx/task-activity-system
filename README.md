@@ -4,6 +4,10 @@ A real-time task management backend built with Node.js (TypeScript), PostgreSQL,
 
 🚀 **Live Demo:** https://task-activity-system-production.up.railway.app
 
+> Open the live URL in your browser for an interactive demo — or hit the endpoints directly with curl. Both work on the same server.
+
+---
+
 ## Features
 
 - **REST API** — Create, list, and update tasks
@@ -14,6 +18,53 @@ A real-time task management backend built with Node.js (TypeScript), PostgreSQL,
 - **Pagination & filtering** — Filter by status, search by keyword, paginate results
 - **Docker** — One-command setup with Docker Compose
 - **Railway** — Deployed and live
+
+---
+
+## Testing the Live Demo
+
+### Option 1 — Browser UI
+
+Visit https://task-activity-system-production.up.railway.app
+
+- Register or log in
+- Create and update tasks
+- Open the same URL in a **second tab** with a different user — any task event in one tab appears instantly in the other tab's live feed, demonstrating the WebSocket + Redis Pub/Sub pipeline in real time
+
+### Option 2 — curl
+
+```bash
+BASE=https://task-activity-system-production.up.railway.app
+
+# 1. Register
+curl -s -X POST $BASE/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username": "alice", "password": "secret123"}' | jq
+
+# 2. Save token
+TOKEN="paste-token-here"
+
+# 3. Create a task
+curl -s -X POST $BASE/tasks \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"title": "Fix login bug", "description": "Users cant log in on mobile"}' | jq
+
+# 4. List tasks
+curl -s $BASE/tasks -H "Authorization: Bearer $TOKEN" | jq
+
+# 5. Update status (paste task id from step 4)
+curl -s -X PATCH $BASE/tasks/<task-id> \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"status": "in-progress"}' | jq
+
+# 6. Activity logs
+curl -s "$BASE/tasks/activity" -H "Authorization: Bearer $TOKEN" | jq
+
+# 7. Health check
+curl -s $BASE/health | jq
+```
 
 ---
 
@@ -35,7 +86,7 @@ docker compose up --build
 docker-compose up --build
 ```
 
-The API will be available at `http://localhost:3000`.
+The API and UI will be available at `http://localhost:3000`.
 
 > Migrations run automatically on startup — no separate step needed.
 
@@ -67,7 +118,7 @@ npm run dev
 
 ## API Reference
 
-Base URL (live): `https://task-activity-system-production.up.railway.app`  
+Base URL (live): `https://task-activity-system-production.up.railway.app`
 Base URL (local): `http://localhost:3000`
 
 ### Auth
@@ -112,12 +163,12 @@ GET /tasks?search=bug&page=2&limit=10
 ```
 
 Query params:
-| Param    | Type   | Description                                   |
-|----------|--------|-----------------------------------------------|
+| Param | Type | Description |
+|---|---|---|
 | `status` | string | Filter: `pending`, `in-progress`, `completed` |
-| `search` | string | Full-text search on title and description     |
-| `page`   | int    | Page number (default: 1)                      |
-| `limit`  | int    | Items per page (default: 20, max: 100)        |
+| `search` | string | Full-text search on title and description |
+| `page` | int | Page number (default: 1) |
+| `limit` | int | Items per page (default: 20, max: 100) |
 
 #### Update Task Status
 ```
@@ -194,6 +245,8 @@ src/
 ├── types/index.ts
 ├── app.ts                       # Express app factory
 └── index.ts                     # Bootstrap (HTTP + WebSocket server)
+public/
+└── index.html                   # Demo frontend (single file, no build step)
 ```
 
 ---
@@ -237,6 +290,7 @@ All async route handlers use `try/catch` forwarding to a central `errorHandler` 
 | Redis activity log (no Postgres) | Logs are ephemeral (capped at 1,000); for production you'd want durable storage |
 | Inline migrations | Slightly slower cold start; eliminates deployment complexity entirely |
 | Any status → any status | No enforced FSM transitions; intentional for flexibility (easy to add) |
+| Single-file frontend | No build step, no framework — easy to review and self-contained |
 
 ---
 
@@ -274,7 +328,7 @@ CACHE_TTL=300
 
 ### 5. Set the public port
 
-App service → **Settings** → **Networking** → **Public Networking** → enter the port Railway assigned (check your logs — Railway overrides `PORT` automatically).
+App service → **Settings** → **Networking** → **Public Networking** → enter the port shown in your deployment logs (Railway overrides `PORT` automatically).
 
 ### 6. Deploy
 
