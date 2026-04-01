@@ -22,10 +22,9 @@ RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
 
-# Run migrations then start the server
-COPY docker/entrypoint.sh ./entrypoint.sh
-RUN chmod +x entrypoint.sh
+# Copy SQL schema so it's available at runtime
+COPY src/config/schema.sql ./dist/config/schema.sql
 
 EXPOSE 3000
 
-ENTRYPOINT ["./entrypoint.sh"]
+CMD ["node", "dist/index.js"]
