@@ -2,6 +2,8 @@
 
 A real-time task management backend built with Node.js (TypeScript), PostgreSQL, Redis, and Socket.io.
 
+🚀 **Live Demo:** https://task-activity-system-production.up.railway.app
+
 ## Features
 
 - **REST API** — Create, list, and update tasks
@@ -11,6 +13,7 @@ A real-time task management backend built with Node.js (TypeScript), PostgreSQL,
 - **Activity logs** — Redis List stores an audit trail of all task events
 - **Pagination & filtering** — Filter by status, search by keyword, paginate results
 - **Docker** — One-command setup with Docker Compose
+- **Railway** — Deployed and live
 
 ---
 
@@ -18,7 +21,7 @@ A real-time task management backend built with Node.js (TypeScript), PostgreSQL,
 
 ```bash
 # Clone the repo
-git clone <repo-url>
+git clone https://github.com/d-mtrx/task-activity-system.git
 cd task-activity-system
 
 # Copy env file (defaults work out of the box with Docker)
@@ -33,6 +36,8 @@ docker-compose up --build
 ```
 
 The API will be available at `http://localhost:3000`.
+
+> Migrations run automatically on startup — no separate step needed.
 
 ---
 
@@ -54,16 +59,16 @@ npm install
 cp .env.example .env
 # Edit .env with your local Postgres/Redis credentials
 
-# Run database migrations
-npm run db:migrate
-
-# Start dev server with hot reload
+# Start dev server with hot reload (migrations run on startup)
 npm run dev
 ```
 
 ---
 
 ## API Reference
+
+Base URL (live): `https://task-activity-system-production.up.railway.app`  
+Base URL (local): `http://localhost:3000`
 
 ### Auth
 
@@ -107,12 +112,12 @@ GET /tasks?search=bug&page=2&limit=10
 ```
 
 Query params:
-| Param    | Type   | Description                                      |
-|----------|--------|--------------------------------------------------|
-| `status` | string | Filter: `pending`, `in-progress`, `completed`    |
-| `search` | string | Full-text search on title and description        |
-| `page`   | int    | Page number (default: 1)                         |
-| `limit`  | int    | Items per page (default: 20, max: 100)           |
+| Param    | Type   | Description                                   |
+|----------|--------|-----------------------------------------------|
+| `status` | string | Filter: `pending`, `in-progress`, `completed` |
+| `search` | string | Full-text search on title and description     |
+| `page`   | int    | Page number (default: 1)                      |
+| `limit`  | int    | Items per page (default: 20, max: 100)        |
 
 #### Update Task Status
 ```
@@ -122,12 +127,17 @@ Content-Type: application/json
 { "status": "in-progress" }
 ```
 
-Valid status transitions: `pending` → `in-progress` → `completed` (any direction is allowed).
+Valid statuses: `pending`, `in-progress`, `completed` (any direction is allowed).
 
 #### Activity Logs
 ```
-GET /tasks/activity            # Last 50 events across all tasks
-GET /tasks/activity?taskId=<id> # Events for a specific task
+GET /tasks/activity              # Last 50 events across all tasks
+GET /tasks/activity?taskId=<id>  # Events for a specific task
+```
+
+#### Health Check
+```
+GET /health
 ```
 
 ---
@@ -139,7 +149,7 @@ Connect via Socket.io:
 ```js
 import { io } from 'socket.io-client';
 
-const socket = io('http://localhost:3000', {
+const socket = io('https://task-activity-system-production.up.railway.app', {
   auth: { token: '<jwt>' }   // optional — read-only access works without token
 });
 
@@ -160,9 +170,9 @@ socket.on('task:updated', (event) => {
 ```
 src/
 ├── config/
-│   ├── database.ts     # PostgreSQL pool
-│   ├── redis.ts        # Redis clients (cache, pub, sub)
-│   └── migrate.ts      # Schema migrations
+│   ├── database.ts              # PostgreSQL pool
+│   ├── redis.ts                 # Redis clients (cache, pub, sub)
+│   └── schema.sql               # Schema — runs on every startup (idempotent)
 ├── controllers/
 │   ├── task.controller.ts
 │   └── auth.controller.ts
@@ -170,7 +180,7 @@ src/
 │   ├── auth.middleware.ts
 │   └── error.middleware.ts
 ├── models/
-│   ├── task.model.ts   # SQL queries
+│   ├── task.model.ts            # SQL queries
 │   └── user.model.ts
 ├── routes/
 │   ├── task.routes.ts
@@ -182,8 +192,8 @@ src/
 │   ├── event.service.ts         # Pub/Sub ↔ Socket.io bridge
 │   └── activity-log.service.ts  # Redis List audit trail
 ├── types/index.ts
-├── app.ts              # Express app factory
-└── index.ts            # Bootstrap (HTTP + WebSocket server)
+├── app.ts                       # Express app factory
+└── index.ts                     # Bootstrap (HTTP + WebSocket server)
 ```
 
 ---
@@ -198,15 +208,19 @@ Tasks are structured, relational data with strict schema requirements (UUID prim
 
 Redis serves **three distinct roles**, each chosen because a relational database would be a poor fit:
 
-1. **Caching (`GET /tasks`)** — The task list is read far more than it changes. A 5-minute cache in Redis reduces DB load significantly. Cache keys include the query parameters so different filters don't collide. Invalidation happens on every create/update.
+1. **Caching (`GET /tasks`)** — The task list is read far more than it changes. A 5-minute cache in Redis reduces DB load significantly. Cache keys include query parameters so different filters don't collide. Invalidation happens on every create/update.
 
-2. **Pub/Sub (real-time broadcast)** — Socket.io by itself only broadcasts to clients connected to the *same* process. In a multi-replica deployment, a task updated on Instance A must reach clients on Instance B. Redis Pub/Sub decouples the emitter from the socket layer: any instance publishes to `task:events`, all instances subscribe and forward to their local sockets. This costs one extra Redis round-trip but makes horizontal scaling trivial.
+2. **Pub/Sub (real-time broadcast)** — Socket.io by itself only broadcasts to clients connected to the *same* process. In a multi-replica deployment, a task updated on Instance A must reach clients on Instance B. Redis Pub/Sub decouples the emitter from the socket layer: any instance publishes to `task:events`, all instances subscribe and forward to their local sockets. This makes horizontal scaling trivial.
 
 3. **Activity logs (Redis List)** — `LPUSH` + `LTRIM` gives O(1) inserts with automatic bounding at 1,000 entries. Activity logs are high-write, short-lived, and don't need joins or transactions — perfect for Redis. Storing them in Postgres would require index maintenance and periodic cleanup jobs for no real benefit.
 
 ### Why a separate Redis connection for Pub/Sub?
 
-Redis docs require dedicated connections for subscribers — a client in subscribe mode cannot issue regular commands. We maintain three clients: `redis` (cache), `redisPub` (publish), `redisSub` (subscribe).
+Redis requires dedicated connections for subscribers — a client in subscribe mode cannot issue regular commands. We maintain three clients: `redis` (cache), `redisPub` (publish), `redisSub` (subscribe).
+
+### Why inline migrations instead of a migration runner?
+
+All schema SQL uses `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`, and `CREATE OR REPLACE FUNCTION` — making it fully idempotent. Running it on every startup is safe, removes the need for a separate migration step, and works seamlessly on both Docker and Railway without shell script timing issues.
 
 ### Error handling
 
@@ -219,9 +233,9 @@ All async route handlers use `try/catch` forwarding to a central `errorHandler` 
 | Decision | Trade-off |
 |---|---|
 | No ORM (raw `pg`) | More SQL to write, but full control over queries and no hidden N+1 problems |
-| JWT (stateless auth) | Tokens can't be revoked without a blocklist; acceptable for a take-home scope |
+| JWT (stateless auth) | Tokens can't be revoked without a blocklist; acceptable for this scope |
 | Redis activity log (no Postgres) | Logs are ephemeral (capped at 1,000); for production you'd want durable storage |
-| No rate limiting | Easy to add with `express-rate-limit` + Redis store; out of scope here |
+| Inline migrations | Slightly slower cold start; eliminates deployment complexity entirely |
 | Any status → any status | No enforced FSM transitions; intentional for flexibility (easy to add) |
 
 ---
@@ -234,38 +248,42 @@ Go to [railway.app](https://railway.app) → **New Project** → **Deploy from G
 
 ### 2. Add PostgreSQL
 
-Inside your Railway project → **New** → **Database** → **Add PostgreSQL**.  
-Railway will automatically inject `DATABASE_URL` into your app's environment.
+Inside your Railway project → **New** → **Database** → **Add PostgreSQL**.
 
 ### 3. Add Redis
 
-**New** → **Database** → **Add Redis**.  
-Railway will automatically inject `REDIS_URL`.
+**New** → **Database** → **Add Redis**.
 
 ### 4. Set environment variables
 
-In your app service → **Variables**, add:
+In your app service → **Variables**, set the following to match your Railway Postgres and Redis service values:
 
 ```
-JWT_SECRET=your-super-secret-key
+POSTGRES_HOST=<from Railway Postgres service>
+POSTGRES_PORT=<from Railway Postgres service>
+POSTGRES_DB=<from Railway Postgres service>
+POSTGRES_USER=<from Railway Postgres service>
+POSTGRES_PASSWORD=<from Railway Postgres service>
+REDIS_HOST=<from Railway Redis service>
+REDIS_PORT=<from Railway Redis service>
+REDIS_PASSWORD=<from Railway Redis service>
+JWT_SECRET=<your-strong-secret>
 NODE_ENV=production
 CACHE_TTL=300
 ```
 
-`DATABASE_URL` and `REDIS_URL` are injected automatically — do not set them manually.
+### 5. Set the public port
 
-### 5. Deploy
+App service → **Settings** → **Networking** → **Public Networking** → enter the port Railway assigned (check your logs — Railway overrides `PORT` automatically).
 
-Railway deploys automatically on every push to `main`. Trigger a manual deploy from the Railway dashboard if needed.
+### 6. Deploy
 
-Your app will be live at the Railway-generated URL (e.g. `https://task-activity-system-production.up.railway.app`).
+Railway deploys automatically on every push to `main`.
 
 ### How Railway vs Docker env vars work
 
 | Variable | Docker | Railway |
 |---|---|---|
-| Postgres | `POSTGRES_HOST/PORT/DB/USER/PASSWORD` | `DATABASE_URL` (auto-injected) |
-| Redis | `REDIS_HOST/PORT/PASSWORD` | `REDIS_URL` (auto-injected) |
+| Postgres | `POSTGRES_HOST/PORT/DB/USER/PASSWORD` | Same vars, values from Railway Postgres service |
+| Redis | `REDIS_HOST/PORT/PASSWORD` | Same vars, values from Railway Redis service |
 | Auth | `JWT_SECRET` | `JWT_SECRET` (set manually) |
-
-The app detects which environment it's in and uses the appropriate config automatically.
