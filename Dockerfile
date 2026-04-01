@@ -21,9 +21,10 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
-
-# Copy SQL schema so it's available at runtime
 COPY src/config/schema.sql ./dist/config/schema.sql
+
+# Copy frontend
+COPY public ./public
 
 EXPOSE 3000
 
