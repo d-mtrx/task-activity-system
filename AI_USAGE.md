@@ -6,7 +6,7 @@ This document reflects how AI tooling was used during the development of this sy
 
 ## Tools Used
 
-- **Claude (Anthropic)** — primary AI assistant throughout the build
+- **Claude (Anthropic)**  primary AI assistant throughout the build
 
 ---
 
