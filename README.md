@@ -4,34 +4,34 @@ A real-time task management backend built with Node.js (TypeScript), PostgreSQL,
 
 🚀 **Live Demo:** https://task-activity-system-production.up.railway.app
 
-> Open the live URL in your browser for an interactive demo — or hit the endpoints directly with curl. Both work on the same server.
+> Open the live URL in your browser for an interactive demo   or hit the endpoints directly with curl. Both work on the same server.
 
 ---
 
 ## Features
 
-- **REST API** — Create, list, and update tasks
-- **Real-time updates** — WebSocket broadcast via Socket.io + Redis Pub/Sub
-- **Token-based auth** — JWT authentication on all task endpoints
-- **Caching** — Redis cache for `GET /tasks` with automatic invalidation
-- **Activity logs** — Redis List stores an audit trail of all task events
-- **Pagination & filtering** — Filter by status, search by keyword, paginate results
-- **Docker** — One-command setup with Docker Compose
-- **Railway** — Deployed and live
+- **REST API**   Create, list, and update tasks
+- **Real-time updates**   WebSocket broadcast via Socket.io + Redis Pub/Sub
+- **Token-based auth**   JWT authentication on all task endpoints
+- **Caching**   Redis cache for `GET /tasks` with automatic invalidation
+- **Activity logs**   Redis List stores an audit trail of all task events
+- **Pagination & filtering**   Filter by status, search by keyword, paginate results
+- **Docker**   One-command setup with Docker Compose
+- **Railway**   Deployed and live
 
 ---
 
 ## Testing the Live Demo
 
-### Option 1 — Browser UI
+### Option 1   Browser UI
 
 Visit https://task-activity-system-production.up.railway.app
 
 - Register or log in
 - Create and update tasks
-- Open the same URL in a **second tab** with a different user — any task event in one tab appears instantly in the other tab's live feed, demonstrating the WebSocket + Redis Pub/Sub pipeline in real time
+- Open the same URL in a **second tab** with a different user   any task event in one tab appears instantly in the other tab's live feed, demonstrating the WebSocket + Redis Pub/Sub pipeline in real time
 
-### Option 2 — curl
+### Option 2   curl
 
 ```bash
 BASE=https://task-activity-system-production.up.railway.app
@@ -68,7 +68,7 @@ curl -s $BASE/health | jq
 
 ---
 
-## Quick Start (Docker — recommended)
+## Quick Start (Docker   recommended)
 
 ```bash
 # Clone the repo
@@ -88,7 +88,7 @@ docker-compose up --build
 
 The API and UI will be available at `http://localhost:3000`.
 
-> Migrations run automatically on startup — no separate step needed.
+> Migrations run automatically on startup   no separate step needed.
 
 ---
 
@@ -203,7 +203,7 @@ Connect via Socket.io:
 import { io } from 'socket.io-client';
 
 const socket = io('https://task-activity-system-production.up.railway.app', {
-  auth: { token: '<jwt>' }   // optional — read-only access works without token
+  auth: { token: '<jwt>' }   // optional   read-only access works without token
 });
 
 socket.on('task:created', (event) => {
@@ -225,7 +225,7 @@ src/
 ├── config/
 │   ├── database.ts              # PostgreSQL pool
 │   ├── redis.ts                 # Redis clients (cache, pub, sub)
-│   └── schema.sql               # Schema — runs on every startup (idempotent)
+│   └── schema.sql               # Schema   runs on every startup (idempotent)
 ├── controllers/
 │   ├── task.controller.ts
 │   └── auth.controller.ts
@@ -259,23 +259,23 @@ public/
 
 Tasks are structured, relational data with strict schema requirements (UUID primary keys, status constraints, foreign keys to users). PostgreSQL's ACID guarantees ensure no task update is lost, and indexes on `status` and `created_at` make filtered queries efficient.
 
-### Why Redis — and for what exactly?
+### Why Redis   and for what exactly?
 
 Redis serves **three distinct roles**, each chosen because a relational database would be a poor fit:
 
-1. **Caching (`GET /tasks`)** — The task list is read far more than it changes. A 5-minute cache in Redis reduces DB load significantly. Cache keys include query parameters so different filters don't collide. Invalidation happens on every create/update.
+1. **Caching (`GET /tasks`)**   The task list is read far more than it changes. A 5-minute cache in Redis reduces DB load significantly. Cache keys include query parameters so different filters don't collide. Invalidation happens on every create/update.
 
-2. **Pub/Sub (real-time broadcast)** — Socket.io by itself only broadcasts to clients connected to the *same* process. In a multi-replica deployment, a task updated on Instance A must reach clients on Instance B. Redis Pub/Sub decouples the emitter from the socket layer: any instance publishes to `task:events`, all instances subscribe and forward to their local sockets. This makes horizontal scaling trivial.
+2. **Pub/Sub (real-time broadcast)**   Socket.io by itself only broadcasts to clients connected to the *same* process. In a multi-replica deployment, a task updated on Instance A must reach clients on Instance B. Redis Pub/Sub decouples the emitter from the socket layer: any instance publishes to `task:events`, all instances subscribe and forward to their local sockets. This makes horizontal scaling trivial.
 
-3. **Activity logs (Redis List)** — `LPUSH` + `LTRIM` gives O(1) inserts with automatic bounding at 1,000 entries. Activity logs are high-write, short-lived, and don't need joins or transactions — perfect for Redis. Storing them in Postgres would require index maintenance and periodic cleanup jobs for no real benefit.
+3. **Activity logs (Redis List)**   `LPUSH` + `LTRIM` gives O(1) inserts with automatic bounding at 1,000 entries. Activity logs are high-write, short-lived, and don't need joins or transactions   perfect for Redis. Storing them in Postgres would require index maintenance and periodic cleanup jobs for no real benefit.
 
 ### Why a separate Redis connection for Pub/Sub?
 
-Redis requires dedicated connections for subscribers — a client in subscribe mode cannot issue regular commands. We maintain three clients: `redis` (cache), `redisPub` (publish), `redisSub` (subscribe).
+Redis requires dedicated connections for subscribers   a client in subscribe mode cannot issue regular commands. We maintain three clients: `redis` (cache), `redisPub` (publish), `redisSub` (subscribe).
 
 ### Why inline migrations instead of a migration runner?
 
-All schema SQL uses `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`, and `CREATE OR REPLACE FUNCTION` — making it fully idempotent. Running it on every startup is safe, removes the need for a separate migration step, and works seamlessly on both Docker and Railway without shell script timing issues.
+All schema SQL uses `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`, and `CREATE OR REPLACE FUNCTION`   making it fully idempotent. Running it on every startup is safe, removes the need for a separate migration step, and works seamlessly on both Docker and Railway without shell script timing issues.
 
 ### Error handling
 
@@ -292,7 +292,7 @@ All async route handlers use `try/catch` forwarding to a central `errorHandler` 
 | Redis activity log (no Postgres) | Logs are ephemeral (capped at 1,000); for production you'd want durable storage |
 | Inline migrations | Slightly slower cold start; eliminates deployment complexity entirely |
 | Any status → any status | No enforced FSM transitions; intentional for flexibility (easy to add) |
-| Single-file frontend | No build step, no framework — easy to review and self-contained |
+| Single-file frontend | No build step, no framework   easy to review and self-contained |
 
 ---
 
