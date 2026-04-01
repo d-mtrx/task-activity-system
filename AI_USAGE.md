@@ -18,11 +18,11 @@ I described the requirements (REST API + PostgreSQL + Redis + WebSockets + auth 
 
 ### 2. Redis connection strategy for Pub/Sub
 
-I asked Claude to explain why you need separate Redis client instances for Pub/Sub vs regular commands. It correctly explained that a client in `SUBSCRIBE` mode is blocked and cannot issue other commands — which is why `redisPub`, `redisSub`, and the main `redis` client are three separate connections. I would have likely hit this as a runtime bug without asking first.
+I asked Claude to explain why you need separate Redis client instances for Pub/Sub vs regular commands. It correctly explained that a client in `SUBSCRIBE` mode is blocked and cannot issue other commands   which is why `redisPub`, `redisSub`, and the main `redis` client are three separate connections. I would have likely hit this as a runtime bug without asking first.
 
 ### 3. Boilerplate for express-validator
 
-I asked Claude to generate the validator chains for the task and auth controllers. It produced correct chains. I reviewed and trimmed them — in particular I removed a redundant `.escape()` call it added to the title field (which would corrupt content like `<fix this>`) and replaced it with `.trim()` only.
+I asked Claude to generate the validator chains for the task and auth controllers. It produced correct chains. I reviewed and trimmed them   in particular I removed a redundant `.escape()` call it added to the title field (which would corrupt content like `<fix this>`) and replaced it with `.trim()` only.
 
 ### 4. TypeScript type definitions
 
@@ -52,6 +52,6 @@ Asked Claude for a `docker-compose.yml` with proper healthchecks so the app cont
 
 ## Reflection
 
-AI was genuinely useful for reducing time on boilerplate and for explaining subtle infrastructure concerns (Redis connection modes, Postgres trigger syntax). It was not useful as a rubber stamp — every generated snippet needed review, and several had subtle bugs or style choices that didn't fit the codebase.
+AI was genuinely useful for reducing time on boilerplate and for explaining subtle infrastructure concerns (Redis connection modes, Postgres trigger syntax). It was not useful as a rubber stamp   every generated snippet needed review, and several had subtle bugs or style choices that didn't fit the codebase.
 
 The right mental model: AI is a fast first-draft machine. You still need to read the output, understand it, and own it. I wouldn't submit anything I couldn't explain line-by-line in a review.
